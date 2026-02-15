@@ -37,7 +37,7 @@ pipeline {
                 // Build Docker image inside Minikube so Kubernetes can use it
                 sh '''
                 eval $(minikube docker-env)
-                docker build -t $IMAGE_NAME .
+                docker build -t devops-app:latest .
                 '''
             }
         }
