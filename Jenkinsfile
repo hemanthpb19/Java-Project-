@@ -2,19 +2,24 @@ pipeline {
     agent any
 
     tools {
-        maven 'maven'  // Name of Maven in Jenkins Global Tool Configuration
-        jdk 'jdk17'    // Name of JDK in Jenkins Global Tool Configuration
+        maven 'maven'
+        jdk 'jdk17'
     }
 
     environment {
         IMAGE_NAME = "devops-app"
+        DOCKER_REGISTRY = "your-dockerhub-username"   // Replace with your DockerHub username
+        DOCKER_TAG = "${env.BUILD_NUMBER}"
+        K8S_NAMESPACE = "default"
     }
 
     stages {
 
-        stage('Checkout') {
+        stage('Git Checkout') {   // Unique name
             steps {
-                git 'https://github.com/hemanthpb19/Java-Project-'  // Replace with your Git repo URL
+                git branch: 'main',
+                    url: 'https://github.com/hemanthpb19/Java-Project-',
+                    credentialsId: 'github-creds'
             }
         }
 
@@ -26,38 +31,41 @@ pipeline {
 
         stage('SonarQube Scan') {
             steps {
-                withSonarQubeEnv('sonar') {  // 'sonar' = SonarQube server configured in Jenkins
+                withSonarQubeEnv('sonar') {
                     sh 'mvn sonar:sonar'
                 }
             }
         }
 
-        stage('Docker Build') {
+        stage('Docker Build & Push') {
             steps {
-                // Build Docker image inside Minikube so Kubernetes can use it
-                sh '''
-                eval $(minikube docker-env)
-                docker build -t devops-app:latest .
-                '''
+                script {
+                    sh """
+                        docker build -t ${DOCKER_REGISTRY}/${IMAGE_NAME}:${DOCKER_TAG} .
+                        docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${DOCKER_TAG}
+                    """
+                }
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
-                sh '''
-                kubectl apply -f k8s/
-                kubectl get pods
-                '''
+                script {
+                    sh """
+                        kubectl set image deployment/${IMAGE_NAME} ${IMAGE_NAME}=${DOCKER_REGISTRY}/${IMAGE_NAME}:${DOCKER_TAG} -n ${K8S_NAMESPACE}
+                        kubectl rollout status deployment/${IMAGE_NAME} -n ${K8S_NAMESPACE}
+                    """
+                }
             }
         }
     }
 
     post {
         success {
-            echo 'Pipeline completed successfully!'
+            echo "Pipeline completed successfully!"
         }
         failure {
-            echo 'Pipeline failed!'
+            echo "Pipeline failed!"
         }
     }
 }
